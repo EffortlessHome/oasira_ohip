@@ -1,5 +1,0 @@
-DOMAIN = "oracle_hospitality"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
-CONF_API_URL = "api_url"
-DEFAULT_NAME = "Oracle Hospitality FO Status"
