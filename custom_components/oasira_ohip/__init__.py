@@ -33,8 +33,26 @@ _LOGGER = logging.getLogger(__name__)
 UPDATE_INTERVAL = timedelta(minutes=15)
 
 
+class HASSComponent:
+    """Hasscomponent."""
+
+    # Class-level property to hold the hass instance
+    hass_instance = None
+
+    @classmethod
+    def set_hass(cls, hass: HomeAssistant) -> None:
+        """Set Hass."""
+        cls.hass_instance = hass
+
+    @classmethod
+    def get_hass(cls):  # noqa: ANN206
+        """Get Hass."""
+        return cls.hass_instance
+
+
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the integration via YAML (if needed)."""
+    HASSComponent.set_hass(hass)
     return True
 
 
@@ -44,15 +62,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.data[DOMAIN]["config"] = entry
     hass.data[DOMAIN][entry.entry_id] = entry.data
 
+    HASSComponent.set_hass(hass)
+
     # Start a timer to update the sensor every 15 minutes
     async_track_time_interval(hass, async_update, UPDATE_INTERVAL)
 
-    return await loaddata(hass)
+    return await loaddata()
 
 
-async def loaddata(hass: HomeAssistant):
+async def loaddata():
     """Load data from OHIP and create sensors."""
 
+    hass = HASSComponent.get_hass()
     entry = hass.data[DOMAIN]["config"]
 
     try:
@@ -119,10 +140,10 @@ async def loaddata(hass: HomeAssistant):
     return True
 
 
-async def async_update(hass: HomeAssistant):
+async def async_update(event_time):
     """Fetch new data and update the state."""
     _LOGGER.info("Fetching new data for OHIP")
-    await loaddata(hass)
+    await loaddata()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
