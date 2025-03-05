@@ -1,0 +1,10 @@
+DOMAIN = "oasiraohip"
+DEFAULT_NAME = "oasiraohip"
+
+CONF_USERNAME = "username"
+CONF_PASSWORD = "password"
+CONF_OHIP_HOST_URL = "ohip_host_url"
+CONF_APPKEY = "appkey"
+CONF_HOTELID = "hotelid"
+CONF_CLIENTID = "client_id"
+CONF_CLIENTSECRET = "client_secret"

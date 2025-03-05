@@ -1,0 +1,3 @@
+oracle_hospitality.fo_status:
+  description: "Fetch the FO status."
+  fields: {}

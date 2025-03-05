@@ -1,0 +1,9 @@
+{
+  "domain": "oasiraohip",
+  "name": "Oasira OHIP",
+  "version": "1.0.0",
+  "documentation": "https://github.com/EffortlessHome/oasira_ohip",
+  "requirements": ["requests"],
+  "codeowners": ["@effortlesshome"],
+  "config_flow": true
+}
