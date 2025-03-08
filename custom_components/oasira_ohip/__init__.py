@@ -86,52 +86,120 @@ async def loaddata():
         client_id = entry.data.get(CONF_CLIENTID)
         client_secret = entry.data.get(CONF_CLIENTSECRET)
 
-        # TODO: authenticate
+        # authenticate
         token = await authenticate(
             client_id, client_secret, ohip_host, appkey, username, password
         )
 
         print(token)
 
-        url = ohip_host + "/fof/v1/hotels/" + hotelid + "/rooms"
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token,
-            "x-hotelid": hotelid,
-            "x-app-key": appkey,
-        }
+        for i in range(
+            1, 4
+        ):  # The range function goes up to but does not include the last number
+            url = (
+                ohip_host
+                + "/hsk/v1/hotels/"
+                + hotelid
+                + "/housekeepingOverview?limit=100&floor="
+                + str(i)
+            )
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token,
+                "x-hotelid": hotelid,
+                "x-app-key": appkey,
+            }
 
-        _LOGGER.info("Calling get plan status API")
+            _LOGGER.info("Calling get plan status API")
 
-        print(url)
+            print(url)
 
-        async with aiohttp.ClientSession() as session:  # noqa: SIM117
-            async with session.get(url, headers=headers) as response:
-                _LOGGER.debug("API response status: %s", response.status)
-                _LOGGER.debug("API response headers: %s", response.headers)
-                content = await response.text()
-                _LOGGER.debug("API response content: %s", content)
+            async with aiohttp.ClientSession() as session:  # noqa: SIM117
+                async with session.get(url, headers=headers) as response:
+                    _LOGGER.debug("API response status: %s", response.status)
+                    _LOGGER.debug("API response headers: %s", response.headers)
+                    content = await response.text()
+                    _LOGGER.debug("API response content: %s", content)
 
-                print(response.status)
-                print(content)
+                    print(response.status)
 
-                if content is not None:
-                    data = json.loads(content)
+                    if content is not None:
+                        data = json.loads(content)
 
-        rooms = data.get("hotelRoomsDetails", {}).get("room", [])
-        sensors = [HotelRoomSensor(hotelid, room) for room in rooms]
+            # Extract housekeeping statuses
+            rooms = (
+                data.get("housekeepingRoomInfo", {})
+                .get("housekeepingRooms", {})
+                .get("room", [])
+            )
+            statuses = {}
 
-        # Get the sensor platform and add entities correctly
-        platform = async_get_platforms(hass, "sensor")
-        if platform:
-            await platform[0].async_add_entities(sensors, True)
+            for room in rooms:
+                room_id = room.get("roomId", "Unknown")
+                status = (
+                    room.get("housekeeping", {})
+                    .get("housekeepingRoomStatus", {})
+                    .get("housekeepingStatus", "Not found")
+                )
+                statuses[room_id] = status
 
-        binary_sensors = [HotelRoomStatusBinarySensor(hotelid, room) for room in rooms]
+            # Print results
+            for room, status in statuses.items():
+                print(f"Room {room}: {status}")
 
-        platform2 = async_get_platforms(hass, "binary_sensor")
-        if platform2:
-            await platform2[0].async_add_entities(binary_sensors, True)
+            # Retrieve existing sensor and binary sensor entities
+            existing_sensors = hass.data.get("sensor")
+            existing_sensors = existing_sensors.entities if existing_sensors else {}
+
+            # Create a dictionary of existing sensors using their unique_id
+            existing_sensor_dict = {
+                sensor.unique_id: sensor for sensor in existing_sensors
+            }
+
+            existing_binary_sensors = hass.data.get("binary_sensor")
+            existing_binary_sensors = (
+                existing_binary_sensors.entities if existing_binary_sensors else {}
+            )
+
+            existing_binary_sensor_dict = {
+                sensor.unique_id: sensor for sensor in existing_binary_sensors
+            }
+
+            platform = async_get_platforms(hass, "sensor")
+
+            # Update existing sensors or create new ones if they don't exist
+            sensors = []
+            for room, status in statuses.items():
+                if room in existing_sensor_dict:
+                    existing_sensor_dict[room].update_status(
+                        status
+                    )  # Ensure your class has an update method
+                else:
+                    sensors.append(HotelRoomSensor(room, status))
+
+            # Add new sensors if there are any
+            if sensors:
+                platform = async_get_platforms(hass, "sensor")
+                if platform:
+                    await platform[0].async_add_entities(sensors, True)
+
+            platform2 = async_get_platforms(hass, "binary_sensor")
+
+            # Create or update binary sensors
+            binary_sensors = []
+            for room, status in statuses.items():
+                if room in existing_binary_sensor_dict:
+                    existing_binary_sensor_dict[room].update_status(
+                        status
+                    )  # Ensure your class has an update method
+                else:
+                    binary_sensors.append(HotelRoomStatusBinarySensor(room, status))
+
+            if binary_sensors:
+                platform2 = async_get_platforms(hass, "binary_sensor")
+                if platform2:
+                    await platform2[0].async_add_entities(binary_sensors, True)
 
     except (OSError, json.JSONDecodeError) as error:
         _LOGGER.error("Error loading response.json: %s", error)
@@ -198,15 +266,11 @@ async def authenticate(clientid, clientsecret, host, appkey, username, password)
 class HotelRoomSensor(Entity):
     """Representation of a Hotel Room sensor."""
 
-    def __init__(self, name, room_data):
+    def __init__(self, name, status):
         """Initialize the sensor."""
-        self._name = f"{name} Room {room_data['roomId']}"
-        self._room_id = room_data["roomId"]
-        self._state = (
-            room_data.get("housekeeping", {})
-            .get("roomStatus", {})
-            .get("frontOfficeStatus", "Unknown")
-        )
+        self._name = name
+        self._room_id = name
+        self._state = status
 
     @property
     def name(self):
@@ -227,16 +291,11 @@ class HotelRoomSensor(Entity):
 class HotelRoomStatusBinarySensor(BinarySensorEntity):
     """Representation of a Hotel Room status binary sensor."""
 
-    def __init__(self, name, room_data):
+    def __init__(self, name, status):
         """Initialize the binary sensor."""
-        self._name = f"{name} Room {room_data['roomId']} Occupied"
-        self._room_id = room_data["roomId"]
-        self._state = (
-            room_data.get("housekeeping", {})
-            .get("roomStatus", {})
-            .get("frontOfficeStatus", "Vacant")
-            != "Vacant"
-        )
+        self._name = f"{name} Occupied"
+        self._room_id = name
+        self._state = status != "Vacant"
 
     @property
     def name(self):
