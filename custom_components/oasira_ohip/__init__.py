@@ -141,7 +141,7 @@ async def loaddata():
                 status = (
                     room.get("housekeeping", {})
                     .get("housekeepingRoomStatus", {})
-                    .get("housekeepingStatus", "Not found")
+                    .get("frontOfficeStatus", "Not found")
                 )
                 statuses[room_id] = status
 
