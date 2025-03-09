@@ -145,56 +145,26 @@ async def loaddata():
                 statuses[room_id] = status
 
             # Print results
-            for room, status in statuses.items():
-                print(f"Room {room}: {status}")
-
-            # Retrieve existing sensor and binary sensor entities
-            existing_sensors = hass.data.get("sensor")
-            existing_sensors = existing_sensors.entities if existing_sensors else {}
-
-            # Create a dictionary of existing sensors using their unique_id
-            existing_sensor_dict = {
-                sensor.unique_id: sensor for sensor in existing_sensors
-            }
-
-            existing_binary_sensors = hass.data.get("binary_sensor")
-            existing_binary_sensors = (
-                existing_binary_sensors.entities if existing_binary_sensors else {}
-            )
-
-            existing_binary_sensor_dict = {
-                sensor.unique_id: sensor for sensor in existing_binary_sensors
-            }
-
-            platform = async_get_platforms(hass, "sensor")
-
-            # Update existing sensors or create new ones if they don't exist
+            # for room, status in statuses.items():
+            #    print(f"Room {room}: {status}")
+            binary_sensors = []
             sensors = []
-            for room, status in statuses.items():
-                if room in existing_sensor_dict:
-                    existing_sensor_dict[room].update_status(
-                        status
-                    )  # Ensure your class has an update method
-                else:
-                    sensors.append(HotelRoomSensor(room, status))
 
-            # Add new sensors if there are any
+            for room, status in statuses.items():
+                entity_id = "sensor." + room
+                if hass.states.get(entity_id):
+                    print(f"{entity_id} exists!")
+                    hass.states.get(entity_id).object.update_status(status)
+
+                else:
+                    print(f"{entity_id} does not exist!")
+                    sensors.append(HotelRoomSensor(room, status))
+                    binary_sensors.append(HotelRoomStatusBinarySensor(room, status))
+
             if sensors:
                 platform = async_get_platforms(hass, "sensor")
                 if platform:
                     await platform[0].async_add_entities(sensors, True)
-
-            platform2 = async_get_platforms(hass, "binary_sensor")
-
-            # Create or update binary sensors
-            binary_sensors = []
-            for room, status in statuses.items():
-                if room in existing_binary_sensor_dict:
-                    existing_binary_sensor_dict[room].update_status(
-                        status
-                    )  # Ensure your class has an update method
-                else:
-                    binary_sensors.append(HotelRoomStatusBinarySensor(room, status))
 
             if binary_sensors:
                 platform2 = async_get_platforms(hass, "binary_sensor")
@@ -287,6 +257,12 @@ class HotelRoomSensor(Entity):
         """Return additional attributes."""
         return {"room_id": self._room_id}
 
+    def update_status(self, status):
+        """Update the status of the sensor."""
+        self._state = status
+        print(f"Room {self._room_id}: {status}")
+        self.schedule_update_ha_state()
+
 
 class HotelRoomStatusBinarySensor(BinarySensorEntity):
     """Representation of a Hotel Room status binary sensor."""
@@ -311,3 +287,9 @@ class HotelRoomStatusBinarySensor(BinarySensorEntity):
     def extra_state_attributes(self):
         """Return additional attributes."""
         return {"room_id": self._room_id}
+
+    def update_status(self, status):
+        """Update the status of the binary sensor."""
+        self._state = status != "Vacant"
+        print(f"Room {self._room_id}: {status}")
+        self.schedule_update_ha_state()
