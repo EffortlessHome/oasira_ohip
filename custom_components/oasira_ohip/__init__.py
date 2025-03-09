@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers import entity_registry
 from .const import (
     DOMAIN,
     CONF_USERNAME,
@@ -144,32 +145,21 @@ async def loaddata():
                 )
                 statuses[room_id] = status
 
-            # Print results
-            # for room, status in statuses.items():
-            #    print(f"Room {room}: {status}")
-            binary_sensors = []
-            sensors = []
-
             for room, status in statuses.items():
                 entity_id = "sensor." + room
-                if hass.states.get(entity_id):
-                    print(f"{entity_id} exists!")
-                    hass.states.get(entity_id).object.update_status(status)
 
-                else:
-                    print(f"{entity_id} does not exist!")
-                    sensors.append(HotelRoomSensor(room, status))
-                    binary_sensors.append(HotelRoomStatusBinarySensor(room, status))
+                hass.states.async_set(
+                    entity_id=entity_id, new_state=status, force_update=True
+                )
 
-            if sensors:
-                platform = async_get_platforms(hass, "sensor")
-                if platform:
-                    await platform[0].async_add_entities(sensors, True)
+                entity_id_occupied = "binary_sensor." + room + "_occupied"
+                hass.states.async_set(
+                    entity_id=entity_id_occupied,
+                    new_state=status != "Vacant",
+                    force_update=True,
+                )
 
-            if binary_sensors:
-                platform2 = async_get_platforms(hass, "binary_sensor")
-                if platform2:
-                    await platform2[0].async_add_entities(binary_sensors, True)
+                print(f"Room {room} is {status}")
 
     except (OSError, json.JSONDecodeError) as error:
         _LOGGER.error("Error loading response.json: %s", error)
@@ -248,6 +238,11 @@ class HotelRoomSensor(Entity):
         return self._name
 
     @property
+    def unique_id(self) -> str:
+        """Return the unique ID of the sensor."""
+        return self.name
+
+    @property
     def state(self):
         """Return the state of the sensor."""
         return self._state
@@ -257,11 +252,10 @@ class HotelRoomSensor(Entity):
         """Return additional attributes."""
         return {"room_id": self._room_id}
 
-    def update_status(self, status):
-        """Update the status of the sensor."""
-        self._state = status
-        print(f"Room {self._room_id}: {status}")
-        self.schedule_update_ha_state()
+    @property
+    def state(self):  # noqa: ANN201
+        """Return the state of the sensor."""
+        return self._state
 
 
 class HotelRoomStatusBinarySensor(BinarySensorEntity):
@@ -279,6 +273,11 @@ class HotelRoomStatusBinarySensor(BinarySensorEntity):
         return self._name
 
     @property
+    def unique_id(self) -> str:
+        """Return the unique ID of the sensor."""
+        return self.name
+
+    @property
     def is_on(self):
         """Return True if the room is occupied, otherwise False."""
         return self._state
@@ -288,8 +287,7 @@ class HotelRoomStatusBinarySensor(BinarySensorEntity):
         """Return additional attributes."""
         return {"room_id": self._room_id}
 
-    def update_status(self, status):
-        """Update the status of the binary sensor."""
-        self._state = status != "Vacant"
-        print(f"Room {self._room_id}: {status}")
-        self.schedule_update_ha_state()
+    @property
+    def state(self):  # noqa: ANN201
+        """Return the state of the sensor."""
+        return self._state
