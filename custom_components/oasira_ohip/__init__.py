@@ -153,9 +153,12 @@ async def loaddata():
                 )
 
                 entity_id_occupied = "binary_sensor." + room + "_occupied"
+
+                new_state = "on" if status != "Vacant" else "off"
+
                 hass.states.async_set(
                     entity_id=entity_id_occupied,
-                    new_state=status != "Vacant",
+                    new_state=new_state,
                     force_update=True,
                 )
 
